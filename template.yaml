@@ -10,6 +10,6 @@ Resources:
       Handler: index.handler
       MemorySize: 128
       Role: >-
-        arn:aws:iam::362059672355:role/service-role/guardianbrothers-role-azszdsyg
-      Runtime: nodejs12.x
+        arn:aws:iam::243051793923:role/service-role/guardianbrothers-role-cxs5jhui
+      Runtime: nodejs14.x
       Timeout: 3

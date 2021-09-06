@@ -145,7 +145,7 @@ exports.handler = async(event) => {
                 obj.industry = findStock.industry;
                 obj.peRatio = findStock.pe_ratio;
                 obj.dividendYield = findStock.dividend_yield;
-                obj.priceBookRatio = findStock.price_book_rio;
+                obj.priceBookRatio = findStock.price_book_ratio;
                 obj.beta = findStock.beta;
             }
         }
@@ -179,9 +179,7 @@ let refreshStockData = async(access_token) => {
     for (let obj of positions.securitiesAccount.positions) {
         let marketCap = 0;
         try {
-            marketCap = await fetch(`https://api-v2.intrinio.com/securities/${obj.instrument.symbol}/data_point/marketcap/number?api_key=${process.env.intrinio}`, {
-                method: "GET"
-            });
+            marketCap = await fetch(`https://api-v2.intrinio.com/securities/${obj.instrument.symbol}/data_point/marketcap/number?api_key=${process.env.intrinio}`);
             marketCap = await marketCap.json();
             if (typeof marketCap !== 'number') { marketCap = 0; }
         }
@@ -191,9 +189,7 @@ let refreshStockData = async(access_token) => {
 
         let sector = "Other";
         try {
-            sector = await fetch(`https://api-v2.intrinio.com/securities/${obj.instrument.symbol}/data_point/sector/text?api_key=${process.env.intrinio}`, {
-                method: "GET"
-            });
+            sector = await fetch(`https://api-v2.intrinio.com/securities/${obj.instrument.symbol}/data_point/sector/text?api_key=${process.env.intrinio}`);
             sector = await sector.json();
         }
         catch (err) {
@@ -202,9 +198,7 @@ let refreshStockData = async(access_token) => {
 
         let name = obj.instrument.symbol;
         try {
-            name = await fetch(`https://api-v2.intrinio.com/securities/${obj.instrument.symbol}/data_point/name/text?api_key=${process.env.intrinio}`, {
-                method: "GET"
-            });
+            name = await fetch(`https://api-v2.intrinio.com/securities/${obj.instrument.symbol}/data_point/name/text?api_key=${process.env.intrinio}`);
             name = await name.json();
         }
         catch (err) {
@@ -213,9 +207,7 @@ let refreshStockData = async(access_token) => {
 
         let industry = "Other";
         try {
-            industry = await fetch(`https://api-v2.intrinio.com/securities/${obj.instrument.symbol}/data_point/industry_category/text?api_key=${process.env.intrinio}`, {
-                method: "GET"
-            });
+            industry = await fetch(`https://api-v2.intrinio.com/securities/${obj.instrument.symbol}/data_point/industry_category/text?api_key=${process.env.intrinio}`);
             industry = await industry.json();
         }
         catch (err) {
@@ -224,9 +216,7 @@ let refreshStockData = async(access_token) => {
 
         let peRatio = 0;
         try {
-            peRatio = await fetch(`https://api-v2.intrinio.com/securities/${obj.instrument.symbol}/data_point/pricetoearnings/number?api_key=${process.env.intrinio}`, {
-                method: "GET"
-            });
+            peRatio = await fetch(`https://api-v2.intrinio.com/securities/${obj.instrument.symbol}/data_point/pricetoearnings/number?api_key=${process.env.intrinio}`);
             peRatio = await peRatio.json();
             if (typeof peRatio !== 'number') { peRatio = 0; }
         }
@@ -236,9 +226,7 @@ let refreshStockData = async(access_token) => {
 
         let dividendYield = 0;
         try {
-            dividendYield = await fetch(`https://api-v2.intrinio.com/securities/${obj.instrument.symbol}/data_point/dividendyield/number?api_key=${process.env.intrinio}`, {
-                method: "GET"
-            });
+            dividendYield = await fetch(`https://api-v2.intrinio.com/securities/${obj.instrument.symbol}/data_point/dividendyield/number?api_key=${process.env.intrinio}`);
             dividendYield = await dividendYield.json();
             if (typeof dividendYield !== 'number') { dividendYield = 0; }
         }
@@ -248,9 +236,7 @@ let refreshStockData = async(access_token) => {
 
         let priceBookRatio = 0;
         try {
-            priceBookRatio = await fetch(`https://api-v2.intrinio.com/securities/${obj.instrument.symbol}/data_point/pricetobook/number?api_key=${process.env.intrinio}`, {
-                method: "GET"
-            });
+            priceBookRatio = await fetch(`https://api-v2.intrinio.com/securities/${obj.instrument.symbol}/data_point/pricetobook/number?api_key=${process.env.intrinio}`);
             priceBookRatio = await priceBookRatio.json();
             if (typeof priceBookRatio !== 'number') { priceBookRatio = 0; }
         }
@@ -260,9 +246,7 @@ let refreshStockData = async(access_token) => {
 
         let beta = 0;
         try {
-            beta = await fetch(`https://api-v2.intrinio.com/securities/${obj.instrument.symbol}/data_point/beta/number?api_key=${process.env.intrinio}`, {
-                method: "GET"
-            });
+            beta = await fetch(`https://api-v2.intrinio.com/securities/${obj.instrument.symbol}/data_point/beta/number?api_key=${process.env.intrinio}`);
             beta = await beta.json();
             if (typeof beta !== 'number') { beta = 0; }
         }
@@ -270,7 +254,14 @@ let refreshStockData = async(access_token) => {
             console.log(err);
         }
 
-        await pool.query("INSERT INTO stock (id, name, market_cap, sector, industry, pe_ratio, dividend_yield, price_book_ratio, beta) VALUES($1, $2, $3, $4, $5, $6, $7, $8, $9) ON CONFLICT (id) DO NOTHING;", [obj.instrument.symbol, name, marketCap, sector, industry, peRatio, dividendYield, priceBookRatio, beta]);
+        try {
+            await pool.query("INSERT INTO stock (id, name, market_cap, sector, industry, pe_ratio, dividend_yield, price_book_ratio, beta) VALUES($1, $2, $3, $4, $5, $6, $7, $8, $9);", [obj.instrument.symbol, name, marketCap, sector, industry, peRatio, dividendYield, priceBookRatio, beta]);
+        }
+        catch (err) {
+            console.log(err);
+            await pool.query("UPDATE stock SET name=$2, market_cap=$3, sector=$4, industry=$5, pe_ratio=$6, dividend_yield=$7, price_book_ratio=$8, beta=$9 WHERE id=$1;", [obj.instrument.symbol, name, marketCap, sector, industry, peRatio, dividendYield, priceBookRatio, beta]);
+        }
+
     }
     return true;
 };
