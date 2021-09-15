@@ -62,13 +62,49 @@ exports.handler = async(event) => {
             let response3 = await pool.query('INSERT INTO liquidation_value(value, shares) VALUES($1, $2) RETURNING *', [response2.securitiesAccount.currentBalances.liquidationValue, parseFloat(shares_outstanding.rows[0].value)]);
 
             await refreshStockData(response1.access_token);
-
-            return { statusCode: 200, body: JSON.stringify(response3.rows), headers: { 'Access-Control-Allow-Origin': '*' } };
         }
         catch (err) {
             console.log(err);
-            return { statusCode: 400, body: "there was an error, we probably already have a value for today.", headers: { 'Access-Control-Allow-Origin': '*' } };
         }
+
+        //let's track orders now
+        let fromEnteredTime = new Date();
+        fromEnteredTime.setDate(fromEnteredTime.getDate() - 7);
+        fromEnteredTime = fromEnteredTime.toISOString().split('T')[0];
+        let toEnteredTime = new Date();
+        toEnteredTime.setDate(toEnteredTime.getDate() + 1);
+        toEnteredTime = toEnteredTime.toISOString().split('T')[0];
+        
+        let orders = await fetch(`https://api.tdameritrade.com/v1/accounts/${process.env.account_number}/orders?status=FILLED&fromEnteredTime=${fromEnteredTime}&toEnteredTime=${toEnteredTime}`, {
+            method: "GET",
+            headers: { Authorization: `Bearer ${response1.access_token}` }
+        });
+        orders = await orders.json();
+
+        let databaseStocks = await pool.query("SELECT * FROM stock");
+
+        let parseResponse = orders.map(obj => {
+            let name = databaseStocks.rows.filter(innerObj => innerObj.id === obj.orderLegCollection[0].instrument.symbol);
+            return ({
+                orderId: obj.orderId,
+                ticker: obj.orderLegCollection[0].instrument.symbol,
+                company: name.length > 0 ? name[0].name : obj.orderLegCollection[0].instrument.symbol,
+                date: obj.closeTime,
+                order: obj.orderLegCollection[0].instruction,
+                shares: obj.orderLegCollection[0].quantity
+            });
+        });
+
+        for (const row of parseResponse) {
+            try {
+                await pool.query(`INSERT INTO trades ("id", "ticker", "company", "date", "order", "shares") VALUES($1, $2, $3, $4, $5, $6);`, [row.orderId, row.ticker, row.company, row.date, row.order, row.shares]);
+            }
+            catch (err) {
+                console.log(err);
+            }
+        }
+
+        return { statusCode: 200, body: JSON.stringify('success'), headers: { 'Access-Control-Allow-Origin': '*' } };
     }
     else if (event.path === '/auth') {
         return { statusCode: 302, headers: { Location: process.env.auth_uri } };
@@ -166,6 +202,14 @@ exports.handler = async(event) => {
         response1 = await response1.json();
         await refreshStockData(response1.access_token);
         return { statusCode: 200, body: "success!", headers: { 'Access-Control-Allow-Origin': '*' } };
+    }
+    else if (event.path === '/trades') {
+        let trades = await pool.query("SELECT * FROM trades WHERE date>='2021-01-01' ORDER BY date DESC");
+        return {
+            statusCode: 200,
+            body: JSON.stringify(trades.rows),
+            headers: { 'Access-Control-Allow-Origin': '*' }
+        };
     }
 };
 
