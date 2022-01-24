@@ -1,3 +1,4 @@
+const AWS = require('aws-sdk');
 const fetch = require('node-fetch');
 const { Pool } = require('pg');
 const poolConfig = {
@@ -13,7 +14,7 @@ function encodeForm(data) {
     return Object.keys(data).map(key => encodeURIComponent(key) + '=' + encodeURIComponent(data[key])).join('&');
 }
 
-exports.handler = async(event) => {
+exports.handler = async (event) => {
     console.log("BEGIN guardianbrothers: ", { path: event.path, httpMethod: event.httpMethod, body: event.body, queryStringParameters: event.queryStringParameters });
     if (event.path === '/callback') {
         let response1 = await fetch('https://api.tdameritrade.com/v1/oauth2/token', {
@@ -74,7 +75,7 @@ exports.handler = async(event) => {
         let toEnteredTime = new Date();
         toEnteredTime.setDate(toEnteredTime.getDate() + 1);
         toEnteredTime = toEnteredTime.toISOString().split('T')[0];
-        
+
         let orders = await fetch(`https://api.tdameritrade.com/v1/accounts/${process.env.account_number}/orders?status=FILLED&fromEnteredTime=${fromEnteredTime}&toEnteredTime=${toEnteredTime}`, {
             method: "GET",
             headers: { Authorization: `Bearer ${response1.access_token}` }
@@ -211,9 +212,43 @@ exports.handler = async(event) => {
             headers: { 'Access-Control-Allow-Origin': '*' }
         };
     }
+    else if (event.path === '/contact') {
+        event.body ? event.body = JSON.parse(event.body) : event.body = {};
+        AWS.config.update({ region: 'us-east-1' });
+        await new AWS.SES().sendEmail({
+            Destination: {
+                ToAddresses: ['fernando@guardianbrothers.com', 'chris+gb@heythisischris.com']
+            },
+            Message: {
+                Body: {
+                    Html: { Data: event.body.message },
+                    Text: { Data: event.body.message }
+                },
+                Subject: {
+                    Data: `${event.body.firstName} ${event.body.lastName} contacted you from ${event.body.email}`
+                }
+            },
+            Source: 'fernando@guardianbrothers.com',
+            ReplyToAddresses: ['fernando@guardianbrothers.com'],
+        }).promise();
+        return {
+            statusCode: 200,
+            body: JSON.stringify({ message: "success" }),
+            headers: { 'Access-Control-Allow-Origin': '*' }
+        };
+    }
+    else if (event.path === '/mailinglist') {
+        event.body ? event.body = JSON.parse(event.body) : event.body = {};
+        await pool.query(`INSERT INTO "mailing_list" (email) VALUES($1) `, [event.body.email]);
+        return {
+            statusCode: 200,
+            body: JSON.stringify({ message: "success" }),
+            headers: { 'Access-Control-Allow-Origin': '*' }
+        };
+    }
 };
 
-let refreshStockData = async(access_token) => {
+let refreshStockData = async (access_token) => {
     //cool, now we want to keep track of the names, marketcaps, and sectors for each stock in the portfolio
     let positions = await fetch(`https://api.tdameritrade.com/v1/accounts/${process.env.account_number}?fields=positions`, {
         method: "GET",
@@ -235,6 +270,9 @@ let refreshStockData = async(access_token) => {
         try {
             sector = await fetch(`https://api-v2.intrinio.com/securities/${obj.instrument.symbol}/data_point/sector/text?api_key=${process.env.intrinio}`);
             sector = await sector.json();
+            if (typeof sector === 'object') {
+                sector = 'Other';
+            }
         }
         catch (err) {
             console.log(err);
@@ -253,6 +291,9 @@ let refreshStockData = async(access_token) => {
         try {
             industry = await fetch(`https://api-v2.intrinio.com/securities/${obj.instrument.symbol}/data_point/industry_category/text?api_key=${process.env.intrinio}`);
             industry = await industry.json();
+            if (typeof industry === 'object') {
+                industry = 'Other';
+            }
         }
         catch (err) {
             console.log(err);
