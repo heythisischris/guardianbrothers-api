@@ -110,7 +110,7 @@ exports.handler = async (event) => {
     else if (event.path === '/auth') {
         return { statusCode: 302, headers: { Location: process.env.auth_uri } };
     }
-    else if (event.path === '/stats') {
+    else if (event.path === '/stats' || event.path === '/stats/equityFund1') {
         try {
             let response = await pool.query('SELECT * FROM liquidation_value ORDER BY id DESC');
             return { statusCode: 200, body: JSON.stringify(response.rows), headers: { 'Access-Control-Allow-Origin': '*' } };
@@ -119,6 +119,9 @@ exports.handler = async (event) => {
             console.log(err);
             return { statusCode: 400, body: "there was an error", headers: { 'Access-Control-Allow-Origin': '*' } };
         }
+    }
+    else if (event.path === '/stats/hybridFund') {
+        return { statusCode: 200, body: JSON.stringify([{ value: 1000, shares: 1000 }, { value: 1000, shares: 1000 }]), headers: { 'Access-Control-Allow-Origin': '*' } };
     }
     else if (event.path === '/update') {
         if (event.queryStringParameters) {
@@ -133,14 +136,14 @@ exports.handler = async (event) => {
                 }
             }
             else {
-                return { statusCode: 400, body: "There was error processing your update- if you're trying to update the shares outstanding, make sure you follow this URL format: https://api.guardianbrothers.com/update?shares=3000", headers: { 'Access-Control-Allow-Origin': '*' } };
+                return { statusCode: 400, body: "There was error processing your update- if you're trying to update the shares outstanding, make sure you follow this URL format: https://lambda.guardianbrothers.com/update?shares=3000", headers: { 'Access-Control-Allow-Origin': '*' } };
             }
         }
         else {
-            return { statusCode: 400, body: "There was error processing your update- if you're trying to update the shares outstanding, make sure you follow this URL format: https://api.guardianbrothers.com/update?shares=3000", headers: { 'Access-Control-Allow-Origin': '*' } };
+            return { statusCode: 400, body: "There was error processing your update- if you're trying to update the shares outstanding, make sure you follow this URL format: https://lambda.guardianbrothers.com/update?shares=3000", headers: { 'Access-Control-Allow-Origin': '*' } };
         }
     }
-    else if (event.path === '/positions') {
+    else if (event.path === '/positions' || event.path === '/positions/equityFund1') {
         let refresh_token = await pool.query("SELECT value FROM configuration WHERE id='refresh_token'");
         let response1 = await fetch('https://api.tdameritrade.com/v1/oauth2/token', {
             method: "POST",
@@ -188,6 +191,9 @@ exports.handler = async (event) => {
         }
         return { statusCode: 200, body: JSON.stringify({ positions: response2.securitiesAccount.positions, liquidationValue: response2.securitiesAccount.currentBalances.liquidationValue, cashBalance: response2.securitiesAccount.currentBalances.cashBalance }), headers: { 'Access-Control-Allow-Origin': '*' } };
     }
+    else if (event.path === '/positions/hybridFund') {
+        return { statusCode: 200, body: JSON.stringify({ positions: [], liquidationValue: 0, cashBalance: 0 }), headers: { 'Access-Control-Allow-Origin': '*' } };
+    }
     else if (event.path === '/refreshstocks') {
         let refresh_token = await pool.query("SELECT value FROM configuration WHERE id='refresh_token'");
         let response1 = await fetch('https://api.tdameritrade.com/v1/oauth2/token', {
@@ -204,13 +210,16 @@ exports.handler = async (event) => {
         await refreshStockData(response1.access_token);
         return { statusCode: 200, body: "success!", headers: { 'Access-Control-Allow-Origin': '*' } };
     }
-    else if (event.path === '/trades') {
+    else if (event.path === '/trades' || event.path === '/trades/equityFund1') {
         let trades = await pool.query("SELECT * FROM trades WHERE date>='2021-01-01' ORDER BY date DESC");
         return {
             statusCode: 200,
             body: JSON.stringify(trades.rows),
             headers: { 'Access-Control-Allow-Origin': '*' }
         };
+    }
+    else if (event.path === '/trades/hybridFund') {
+        return { statusCode: 200, body: JSON.stringify([]), headers: { 'Access-Control-Allow-Origin': '*' } };
     }
     else if (event.path === '/contact') {
         event.body ? event.body = JSON.parse(event.body) : event.body = {};
