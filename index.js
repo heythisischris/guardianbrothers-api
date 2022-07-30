@@ -9,14 +9,85 @@ const poolConfig = {
     port: process.env.port
 };
 const pool = new Pool(poolConfig);
+const { formatEmailBody } = require('./email.js');
 
 function encodeForm(data) {
     return Object.keys(data).map(key => encodeURIComponent(key) + '=' + encodeURIComponent(data[key])).join('&');
 }
 
-exports.handler = async (event) => {
+exports.handler = async (event, context) => {
     console.log("BEGIN guardianbrothers: ", { path: event.path, httpMethod: event.httpMethod, body: event.body, queryStringParameters: event.queryStringParameters });
-    if (event.path === '/callback') {
+
+    if (event.triggerSource) {
+        if (['TokenGeneration_Authentication', 'TokenGeneration_RefreshTokens'].includes(event.triggerSource)) {
+            event.response = {
+                "claimsOverrideDetails": {
+                    "claimsToAddOrOverride": {
+                        "https://hasura.io/jwt/claims": JSON.stringify({
+                            "x-hasura-allowed-roles": ["user"],
+                            "x-hasura-default-role": "user",
+                            "x-hasura-user-id": event.request.userAttributes.sub
+                        })
+                    }
+                }
+            };
+            return context.done(null, event);
+        }
+        else if (event.triggerSource === 'CustomMessage_SignUp') {
+            event.response.emailSubject = `Confirm your registration, ${event.request.userAttributes['given_name']}!`;
+            event.response.emailMessage = formatEmailBody(`Hello ${event.request.userAttributes['given_name']},<p><a href="https://lambda.guardianbrothers.com/confirm?username=${event.userName}&code=${event.request.codeParameter}&email=${event.request.userAttributes.email}">Click this link to complete your registration.</a><p>Thank you,<br>Guardian Brothers<div style="display:none"><a>${event.request.codeParameter}</a><a>${event.request.codeParameter}</a></div>`, event.request.userAttributes.email);
+            return context.done(null, event);
+        }
+        else if (event.triggerSource === 'PostConfirmation_ConfirmSignUp') {
+            const pool = new Pool(poolConfig);
+            await pool.query(`INSERT INTO users(id, email, first_name, last_name, address, phone) VALUES($1, $2, $3, $4, $5, $6)`, [event.request.userAttributes['sub'], event.request.userAttributes['email'], event.request.userAttributes['given_name'], event.request.userAttributes['family_name'], event.request.userAttributes['address'], event.request.userAttributes['website']]);
+            //send welcome email
+            AWS.config.update({ region: 'us-east-1' });
+            await new AWS.SES().sendEmail({
+                Destination: { ToAddresses: [event.request.userAttributes['email']] },
+                Message: {
+                    Subject: { Data: `Welcome to Guardian Brothers, ${event.request.userAttributes['given_name']}!` },
+                    Body: {
+                        Html: { Data: formatEmailBody(`Hello ${event.request.userAttributes['given_name']},<p><a href="https://guardianbrothers.com/login?email=${event.request.userAttributes['email']}">Click this link to login.</a><p>Thank you,<br>Guardian Brothers`, event.request.userAttributes['email']) }
+                    },
+                },
+                Source: 'Guardian Brothers <noreply@guardianbrothers.com>'
+            }).promise();
+
+            return context.done(null, event);
+        }
+        else if (event.triggerSource === 'CustomMessage_ForgotPassword') {
+            event.response.emailSubject = `Reset your password, ${event.request.userAttributes['given_name']}`;
+            event.response.emailMessage = formatEmailBody(`Hello ${event.request.userAttributes['given_name']},<p>We received a request to reset your password.</p><p><a href="https://staging.guardianbrothers.com/set?email=${event.request.userAttributes.email}&code=${event.request.codeParameter}">Click this link to set your new password.</a><p>If you did not request this, you can ignore this email.</p><p>Thank you,<br>Guardian Brothers<div style="display:none"><a>${event.request.codeParameter}</a><a>${event.request.codeParameter}</a></div>`, event.request.userAttributes['email']);
+            return context.done(null, event);
+        }
+        else if (event.triggerSource === 'PostConfirmation_ConfirmForgotPassword') {
+            //send email letting user know someone reset their password
+            AWS.config.update({ region: 'us-east-1' });
+            await new AWS.SES().sendEmail({
+                Destination: { ToAddresses: [event.request.userAttributes['email']] },
+                Message: {
+                    Subject: { Data: `Alert: you changed your password, ${event.request.userAttributes['given_name']}` },
+                    Body: {
+                        Html: { Data: formatEmailBody(`hey there, ${event.request.userAttributes['given_name']},<p>You've successfully changed your password! If you did not do this, we highly recommend changing your password immediately.</p><p><a href="https://staging.guardianbrothers.com/reset?email=${event.request.userAttributes.email}">Click this link to change your password again.</a><p>Otherwise, you can ignore this email.</p><p>Thank you,<br>Guardian Brothers`, event.request.userAttributes['email']) }
+                    },
+                },
+                Source: 'Guardian Brothers <noreply@guardianbrothers.com>'
+            }).promise();
+            return context.done(null, event);
+        }
+        else if (event.triggerSource === 'CustomMessage_UpdateUserAttribute') {
+            event.response.emailSubject = `Confirm new email address`;
+            event.response.emailMessage = `confirm new email`;
+            return context.done(null, event);
+        }
+    }
+    else if (event.path === '/confirm') {
+        const cisp = new AWS.CognitoIdentityServiceProvider();
+        await cisp.confirmSignUp({ ClientId: process.env.clientId, ConfirmationCode: event.queryStringParameters.code, Username: event.queryStringParameters.username }).promise();
+        return { statusCode: 302, body: null, headers: { 'Access-Control-Allow-Origin': '*', 'Location': `https://staging.guardianbrothers.com/login?email=${event.queryStringParameters.email}` } };
+    }
+    else if (event.path === '/callback') {
         let response1 = await fetch('https://api.tdameritrade.com/v1/oauth2/token', {
             method: "POST",
             headers: { "Content-Type": "application/x-www-form-urlencoded" },
@@ -62,7 +133,7 @@ exports.handler = async (event) => {
         try {
             let response3 = await pool.query('INSERT INTO liquidation_value(value, shares) VALUES($1, $2) RETURNING *', [response2.securitiesAccount.currentBalances.liquidationValue, parseFloat(shares_outstanding.rows[0].value)]);
 
-            await refreshStockData(response1.access_token);
+            // await refreshStockData(response1.access_token);
         }
         catch (err) {
             console.log(err);
@@ -207,8 +278,8 @@ exports.handler = async (event) => {
             })
         });
         response1 = await response1.json();
-        await refreshStockData(response1.access_token);
-        return { statusCode: 200, body: "success!", headers: { 'Access-Control-Allow-Origin': '*' } };
+        // await refreshStockData(response1.access_token);
+        return { statusCode: 200, body: "success! we're actually no longer refreshing stock data because intrinio no longer works.", headers: { 'Access-Control-Allow-Origin': '*' } };
     }
     else if (event.path === '/trades' || event.path === '/trades/equityFund1') {
         let trades = await pool.query("SELECT * FROM trades WHERE date>='2021-01-01' ORDER BY date DESC");
@@ -255,9 +326,44 @@ exports.handler = async (event) => {
             headers: { 'Access-Control-Allow-Origin': '*' }
         };
     }
+    else if (event.path === '/upload') {
+        let rows = event.body.split('\r\n').map(obj => obj.split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/).map(obj => obj.replace(/"/g, '')));
+        const headers = rows.shift();
+        const parsedRows = rows.map(obj =>
+            headers.map((header, index) => {
+                return ({
+                    [header]: obj[index]
+                });
+            }).reduce((acc, x) => {
+                for (var key in x) acc[key] = x[key];
+                return acc;
+            }, {})
+        );
+
+        for (const row of parsedRows) {
+            await pool.query(`
+                INSERT INTO stock(id, name, market_cap, sector, industry, pe_ratio, dividend_yield, price_book_ratio, beta) values($1, $2, $3, $4, $5, $6, $7, $8, $9) 
+                ON CONFLICT (id) 
+                DO UPDATE SET name=$2, market_cap=$3, sector=$4, industry=$5, pe_ratio=$6, dividend_yield=$7, price_book_ratio=$8, beta=$9`,
+                [
+                    row['Ticker'],
+                    row['Company'],
+                    !isNaN(parseFloat(row['Market Cap'])) ? parseFloat(row['Market Cap']) : null,
+                    row['Sector'], row['Industry'],
+                    !isNaN(parseFloat(row['P/E'])) ? parseFloat(row['P/E']) : null,
+                    !isNaN(parseFloat(row['Dividend Yield'])) ? (parseFloat(row['Dividend Yield'].replace('%', '')) / 100) : null,
+                    !isNaN(parseFloat(row['P/B'])) ? parseFloat(row['P/B']) : null,
+                    !isNaN(parseFloat(row['Beta'])) ? parseFloat(row['Beta']) : null
+                ]
+            );
+        }
+
+        return { statusCode: 200, body: JSON.stringify({ response: "success", message: "updated fundamental stock data using uploaded CSV." }), headers: { 'Access-Control-Allow-Origin': '*' } };
+    }
 };
 
 let refreshStockData = async (access_token) => {
+    //todo- replace refreshStockData's API provider (Intrinio) with a new one
     //cool, now we want to keep track of the names, marketcaps, and sectors for each stock in the portfolio
     let positions = await fetch(`https://api.tdameritrade.com/v1/accounts/${process.env.account_number}?fields=positions`, {
         method: "GET",

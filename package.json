@@ -4,7 +4,7 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "build": "zip -r ~/guardianbrothers.zip * && aws lambda update-function-code --function-name guardianbrothers --zip-file \"fileb://~/guardianbrothers.zip\""
   },
   "author": "",
   "license": "ISC",
