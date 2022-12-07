@@ -317,6 +317,64 @@ exports.handler = async (event, context) => {
             headers: { 'Access-Control-Allow-Origin': '*' }
         };
     }
+    else if (event.path === '/hybridcontact') {
+        event.body ? event.body = JSON.parse(event.body) : event.body = {};
+        const message = formatEmailBody(`Hola ${event.body.firstName} ${event.body.lastName},<p/>
+            Espero que se encuentre bien y gracias por su interés en nuestro fondo Guardian Hybrid Fund, LP. Además de BTC, ofrecemos un conjunto completo de soluciones de inversión, como un vehículo criptográfico líquido diversificado (Fondo de monedas), un fondo Ethereum, oportunidades privadas de fintech/criptomonedas en etapa avanzada (SPV únicos) y un ETF (ticker “CRPT”).<p/>
+            A continuación se encuentran nuestros materiales de fondos de Bitcoin y un enlace a nuestras otras soluciones de inversión. Tenemos más de 500mil de dólares invertidos en el espacio de activos digitales, por lo que si está buscando obtener exposición, sería genial conectarse. Avíseme si está interesado en hablar más y con gusto me presentaré, gracias sebastian.<p/>
+            Agenda tu reunion<br/>
+            https://meetings.hubspot.com/guardianbrothers/llamada-de-oportunidad<p/>
+            - Presentación<br/>
+            - Fact Sheet <br/>
+            - Soluciones de inversión Guardian Brothers<p/>
+            
+            Saludos cordiales,<br/>
+            Fernando<p/>
+            
+            Fernando Guardia<br/>
+            +1 (478) 841 - 4516<br/>
+            fernando@guardianbrothers.com<br/>
+        `, event.body.email);
+        await new AWS.SES({ region: 'us-east-1' }).sendEmail({
+            Destination: {
+                ToAddresses: [event.body.email]
+            },
+            Message: {
+                Body: {
+                    Html: { Data: message },
+                    Text: { Data: message }
+                },
+                Subject: {
+                    Data: `Test subject`
+                }
+            },
+            Source: 'fernando@guardianbrothers.com',
+            ReplyToAddresses: ['fernando@guardianbrothers.com'],
+        }).promise();
+        const internalMessage = formatEmailBody(`New hybrid fund lead: ${event.body.firstName} ${event.body.lastName} (${event.body.email, event.body.telephone})`, ``);
+        await new AWS.SES({ region: 'us-east-1' }).sendEmail({
+            Destination: {
+                ToAddresses: ['chris+gb@heythisischris.com'] //'fernando@guardianbrothers.com', 
+            },
+            Message: {
+                Body: {
+                    Html: { Data: internalMessage },
+                    Text: { Data: internalMessage }
+                },
+                Subject: {
+                    Data: `New hybrid fund lead: ${event.body.firstName} ${event.body.lastName} (${event.body.email}, ${event.body.telephone})`
+                }
+            },
+            Source: 'fernando@guardianbrothers.com',
+            ReplyToAddresses: ['fernando@guardianbrothers.com'],
+        }).promise();
+        await pool.query(`INSERT INTO "mailing_list" (email, first_name, last_name, telephone) VALUES($1, $2, $3, $4) `, [event.body.email, event.body.firstName, event.body.lastName, event.body.telephone]);
+        return {
+            statusCode: 200,
+            body: JSON.stringify({ message: "success" }),
+            headers: { 'Access-Control-Allow-Origin': '*' }
+        };
+    }
     else if (event.path === '/mailinglist') {
         event.body ? event.body = JSON.parse(event.body) : event.body = {};
         await pool.query(`INSERT INTO "mailing_list" (email) VALUES($1) `, [event.body.email]);
