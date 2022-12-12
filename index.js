@@ -319,21 +319,27 @@ exports.handler = async (event, context) => {
     }
     else if (event.path === '/hybridcontact') {
         event.body ? event.body = JSON.parse(event.body) : event.body = {};
-        const message = formatEmailBody(`Hola ${event.body.firstName} ${event.body.lastName},<p/>
-            Espero que se encuentre bien y gracias por su interés en nuestro fondo Guardian Hybrid Fund, LP. Además de BTC, ofrecemos un conjunto completo de soluciones de inversión, como un vehículo criptográfico líquido diversificado (Fondo de monedas), un fondo Ethereum, oportunidades privadas de fintech/criptomonedas en etapa avanzada (SPV únicos) y un ETF (ticker “CRPT”).<p/>
-            A continuación se encuentran nuestros materiales de fondos de Bitcoin y un enlace a nuestras otras soluciones de inversión. Tenemos más de 500mil de dólares invertidos en el espacio de activos digitales, por lo que si está buscando obtener exposición, sería genial conectarse. Avíseme si está interesado en hablar más y con gusto me presentaré, gracias sebastian.<p/>
+        const message = formatEmailBody(`Hola ${event.body.firstName} ${event.body.lastName},
+            <p/>
+            Espero que se encuentre bien y gracias por su interés en nuestro fondo Guardian Hybrid Fund, LP. Además de BTC, ofrecemos un conjunto completo de soluciones de inversión, como fondos criptográfico líquido diversificado y carteras personalizadas de acuerdo a las necesdidades de nuestros cliente
+            <p/>
+            A continuación se encuentran nuestros materiales de fondo hibrido y un enlace a nuestras otras soluciones de inversión. Tenemos más de 500mil de dólares invertidos en el espacio de activos digitales, por lo que si está buscando obtener exposición, sería genial conectarse. Avíseme si está interesado en hablar más y saber mas acerca de nuestros servicios.
+            <p/>
             Agenda tu reunion<br/>
-            https://meetings.hubspot.com/guardianbrothers/llamada-de-oportunidad<p/>
-            - Presentación<br/>
-            - Fact Sheet <br/>
-            - Soluciones de inversión Guardian Brothers<p/>
-            
+            https://meetings.hubspot.com/guardianbrothers/llamada-de-oportunidad
+            <p/>
+            Presentación<br/>
+            https://hubs.ly/Q01vkCs40
+            <p/>
+            Fact Sheet<br/>
+            https://hubs.ly/Q01vkCn70
+            <p/>
             Saludos cordiales,<br/>
-            Fernando<p/>
-            
+            Fernando
+            <p/>
             Fernando Guardia<br/>
-            +1 (478) 841 - 4516<br/>
-            fernando@guardianbrothers.com<br/>
+            +1 (478) 841-4516<br/>
+            fernando@guardianbrothers.com
         `, event.body.email);
         await new AWS.SES({ region: 'us-east-1' }).sendEmail({
             Destination: {
@@ -345,7 +351,7 @@ exports.handler = async (event, context) => {
                     Text: { Data: message }
                 },
                 Subject: {
-                    Data: `Test subject`
+                    Data: `Guardian Brothers Hybrid Fund`
                 }
             },
             Source: 'fernando@guardianbrothers.com',
@@ -354,7 +360,10 @@ exports.handler = async (event, context) => {
         const internalMessage = formatEmailBody(`New hybrid fund lead: ${event.body.firstName} ${event.body.lastName} (${event.body.email, event.body.telephone})`, ``);
         await new AWS.SES({ region: 'us-east-1' }).sendEmail({
             Destination: {
-                ToAddresses: ['chris+gb@heythisischris.com'] //'fernando@guardianbrothers.com', 
+                ToAddresses: [
+                    'fernando@guardianbrothers.com',
+                    'chris+gb@heythisischris.com',
+                ]
             },
             Message: {
                 Body: {

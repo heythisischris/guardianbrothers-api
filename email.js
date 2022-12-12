@@ -76,7 +76,9 @@ exports.formatEmailBody = function(body, email) {
                         <a style="display:flex;flex-direction:row;justify-content:flex-start;align-items:center;"
                            href="https://guardianbrothers.com/"
                            target="_blank">
-                            <img src="https://guardianbrothers.com/images/logo.png"
+                            <img
+                                 width="400"
+                                 src="https://guardianbrothers.com/images/logo.png"
                                  alt="Guardian Brothers"
                                  border="0">
                         </a>
